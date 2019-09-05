@@ -208,18 +208,23 @@ send_witness(Data, OnionCompactKey, Time, RSSI, Retry) ->
 %%--------------------------------------------------------------------
 -spec send_to_router(binary(), any()) -> ok.
 send_to_router(Name, #helium_LongFiResp_pb{kind={rx, #helium_LongFiRxPacket_pb{oui=OUI}}}=Resp) ->
+    Swarm = blockchain_swarm:swarm(),
+    Packet = helium_longfi_pb:encode_msg(Resp#helium_LongFiResp_pb{miner_name=Name}),
     case blockchain_worker:blockchain() of
         undefined ->
-            lager:warning("ingnored packet chain is undefined");
+            case application:get_env(miner, default_router, undefined) of
+                undefined ->
+                    lager:warning("no blockchain and no default router are set");
+                Address ->
+                    send_to_router(Swarm, Address, Packet)
+            end;
         Chain ->
             Ledger = blockchain:ledger(Chain),
-            Swarm = blockchain_swarm:swarm(),
-            Packet = helium_longfi_pb:encode_msg(Resp#helium_LongFiResp_pb{miner_name=Name}),
             case blockchain_ledger_v1:find_routing(OUI, Ledger) of
                 {error, _Reason} ->
                     case application:get_env(miner, default_router, undefined) of
                         undefined ->
-                            lager:warning("ingnored could not find OUI ~p in ledger and no default router is set", [OUI]);
+                            lager:warning("ignored could not find OUI ~p in ledger and no default router is set", [OUI]);
                         Address ->
                             send_to_router(Swarm, Address, Packet)
                     end;
