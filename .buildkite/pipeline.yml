@@ -24,6 +24,19 @@ steps:
       - "git fetch -t"
       - ".buildkite/scripts/make_image.sh"
 
+  - if: build.tag =~ /\_GA$$/
+    name: ":whale: AMD64 (no avx) docker"
+    env:
+      REGISTRY_HOST: "quay.io"
+      REGISTRY_NAME: "miner"
+      IMAGE_FORMAT: "docker"
+      IMAGE_ARCH: "amd64-noavx"
+    agents:
+      queue: "erlang"
+    commands:
+      - "git fetch -t"
+      - ".buildkite/scripts/make_image.sh"
+
 # There is some kind of compiler bug in 32 bit ARM
 # and rocksdb, so comment out for now. Can revisit
 # later if need be.
