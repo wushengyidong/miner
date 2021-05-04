@@ -118,7 +118,7 @@
  {<<"multiaddr">>,{pkg,<<"multiaddr">>,<<"1.1.3">>},3},
  {<<"multihash">>,
   {git,"https://github.com/helium/erlang-multihash.git",
-       {ref,"281690630b7529bfc59a9a6bb4c8d7aa05ea3d71"}},
+       {ref,"792074595058d2fd9a59f592daec2b56c33563af"}},
   3},
  {<<"nat">>,
   {git,"https://github.com/benoitc/erlang-nat",
