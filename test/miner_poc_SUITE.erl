@@ -673,6 +673,7 @@ restart_test(Config) ->
 %% ------------------------------------------------------------------
 
 add_block(Chain, ConsensusMembers, Txns) ->
+    ct:pal("*** consensus members ~p", [ConsensusMembers]),
     SortedTxns = lists:sort(fun blockchain_txn:sort/2, Txns),
     B = create_block(ConsensusMembers, SortedTxns),
     ok = blockchain:add_block(B, Chain).

@@ -18,7 +18,8 @@
          txn_in_sequence_nonce_test/1,
          txn_out_of_sequence_nonce_test/1,
          txn_invalid_nonce_test/1,
-         txn_dependent_test/1
+         txn_dependent_test/1,
+         txn_assert_loc_v2_test/1
 
         ]).
 
@@ -28,7 +29,8 @@ all() -> [
           txn_in_sequence_nonce_test,
           txn_out_of_sequence_nonce_test,
           txn_invalid_nonce_test,
-          txn_dependent_test
+          txn_dependent_test,
+         txn_assert_loc_v2_test
          ].
 
 init_per_suite(Config) ->
@@ -43,6 +45,7 @@ init_per_testcase(_TestCase, Config0) ->
     Miners = ?config(miners, Config),
     Addresses = ?config(addresses, Config),
     InitialPaymentTransactions = [ blockchain_txn_coinbase_v1:new(Addr, 5000) || Addr <- Addresses],
+    CoinbaseDCTxns = [blockchain_txn_dc_coinbase_v1:new(Addr, 50000000) || Addr <- Addresses],
     AddGwTxns = [blockchain_txn_gen_gateway_v1:new(Addr, Addr, h3:from_geo({37.780586, -122.469470}, 13), 0)
                  || Addr <- Addresses],
 
@@ -50,6 +53,7 @@ init_per_testcase(_TestCase, Config0) ->
     BlockTime =
         case _TestCase of
             txn_dependent_test -> 5000;
+            txn_assert_loc_v2_test -> 5000;
             _ -> ?config(block_time, Config)
         end,
 
@@ -65,7 +69,7 @@ init_per_testcase(_TestCase, Config0) ->
                                                    ?batch_size => BatchSize,
                                                    ?dkg_curve => Curve}),
 
-    {ok, DKGCompletionNodes} = miner_ct_utils:initial_dkg(Miners, InitialVars ++ InitialPaymentTransactions ++ AddGwTxns,
+    {ok, DKGCompletionNodes} = miner_ct_utils:initial_dkg(Miners, InitialVars ++ InitialPaymentTransactions ++ CoinbaseDCTxns ++ AddGwTxns,
                                              Addresses, NumConsensusMembers, Curve),
     ct:pal("Nodes which completed the DKG: ~p", [DKGCompletionNodes]),
     %% Get both consensus and non consensus miners
@@ -76,6 +80,8 @@ init_per_testcase(_TestCase, Config0) ->
 
     %% confirm we have a height of 1
     ok = miner_ct_utils:wait_for_gte(height, Miners, 2),
+
+
 
     [   {consensus_miners, ConsensusMiners},
         {non_consensus_miners, NonConsensusMiners}
@@ -351,6 +357,95 @@ txn_dependent_test(Config) ->
     ok.
 
 
+
+txn_assert_loc_v2_test(Config) ->
+    %% send a payment txn, but with an out sequence nonce
+    %% this will result in validations determining undecided and the txn will remain in the txn mgr cache
+    %% until it has exceeded the max block span of 15 after which it will be declared invalid
+    %% and removed from cache
+    Miners = ?config(miners, Config),
+
+    ConMiners = ?config(consensus_miners, Config),
+    NonConMiners = ?config(non_consensus_miners, Config),
+    AddrList = ?config(tagged_miner_addresses, Config),
+    Miner = hd(NonConMiners),
+
+    ct:pal("miner in use ~p", [Miner]),
+
+    IgnoredTxns = [blockchain_txn_poc_request_v1],
+    Addr = miner_ct_utils:node2addr(Miner, AddrList),
+
+    Chain = ct_rpc:call(Miner, blockchain_worker, blockchain, []),
+
+    _PayerAddr = Addr,
+    Payee = hd(miner_ct_utils:shuffle(ConMiners)),
+    _PayeeAddr = miner_ct_utils:node2addr(Payee, AddrList),
+    {ok, Pubkey, SigFun, _ECDHFun} = ct_rpc:call(Miner, blockchain_swarm, keys, []),
+    PubKeyBin = libp2p_crypto:pubkey_to_bin(Pubkey),
+
+    %% get the start height
+    {ok, Height} = ct_rpc:call(Miner, blockchain, height, [Chain]),
+
+    %% add the gateway
+    #{public := Full2GatewayPubKey, secret := Full2GatewayPrivKey} = libp2p_crypto:generate_keys(ecc_compact),
+    Full2Gateway = libp2p_crypto:pubkey_to_bin(Full2GatewayPubKey),
+    Full2GatewaySigFun = libp2p_crypto:mk_sig_fun(Full2GatewayPrivKey),
+    %% add gateway base txn
+    AddFull2GatewayTx0 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, new, [PubKeyBin, Full2Gateway, PubKeyBin]),
+    AddFull2GatewayTxFee = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, calculate_fee, [AddFull2GatewayTx0, Chain]),
+    AddFull2GatewayStFee = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, calculate_staking_fee, [AddFull2GatewayTx0, Chain]),
+
+    ct:pal("Add gateway txn fee ~p, staking fee ~p, total: ~p", [AddFull2GatewayTxFee, AddFull2GatewayStFee, AddFull2GatewayTxFee + AddFull2GatewayStFee]),
+    %% set the fees on the base txn and then sign the various txns
+    AddFull2GatewayTx1 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, fee, [AddFull2GatewayTx0, AddFull2GatewayTxFee]),
+    AddFull2GatewayTx2 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, staking_fee, [AddFull2GatewayTx1, AddFull2GatewayStFee]),
+    SignedOwnerAddFull2GatewayTx2 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, sign, [AddFull2GatewayTx2, SigFun]),
+    SignedGatewayAddFull2GatewayTx2 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, sign_request, [SignedOwnerAddFull2GatewayTx2, Full2GatewaySigFun]),
+    SignedPayerAddFull2GatewayTx2 = ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, sign_payer, [SignedGatewayAddFull2GatewayTx2, SigFun]),
+
+    ?assertEqual(ok, ct_rpc:call(Miner, blockchain_txn_add_gateway_v1, is_valid, [SignedPayerAddFull2GatewayTx2, Chain])),
+
+    %% submit the add gateway and wait for it to be absorbed
+    ok = ct_rpc:call(Miner, blockchain_worker, submit_txn, [SignedPayerAddFull2GatewayTx2]),
+    ok = miner_ct_utils:wait_for_gte(height, Miners, Height + 2),
+
+    %% create the assert location v2 txn
+    Loc1 = 16#8c1eec6b66517ff,
+    {_Txn1, Txn2} = base_assert_loc_v2_txn(Miner, Full2Gateway, PubKeyBin, PubKeyBin, Loc1, 1, Chain),
+    ct:pal("assert loc v2 txn 1: ~p", [Txn2]),
+    SignedTxn1 = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign, [Txn2, SigFun]),
+    ct:pal("assert loc v2 SignedTxn1: ~p", [SignedTxn1]),
+    SignedTxn2 = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign_payer, [SignedTxn1, SigFun]),
+    ct:pal("assert loc v2 SignedTxn2: ~p", [SignedTxn2]),
+    ?assertEqual(ok, ct_rpc:call(Miner, blockchain_txn_assert_location_v2, is_valid, [SignedTxn2, Chain])),
+
+    %% submit the assert location, wait for it to be absorbed
+    ok = ct_rpc:call(Miner, blockchain_worker, submit_txn, [SignedTxn2]),
+%%    ok = miner_ct_utils:wait_for_gte(height, Miners, Height + 2),
+    ok = ct_rpc:call(Miner, blockchain_worker, submit_txn, [SignedTxn2]),
+    ok = miner_ct_utils:wait_for_gte(height, Miners, Height + 4),
+
+%%    Loc2 = 631252734740396943,
+%%    {_Txn1b, Txn2b} = base_assert_loc_v2_txn(Miner, Full2Gateway, PubKeyBin, PubKeyBin, Loc2, 2, Chain),
+%%    SignedTxn1b = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign, [Txn2b, SigFun]),
+%%    SignedTxn2b = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign_payer, [SignedTxn1b, SigFun]),
+%%
+%%    {_Txn1c, Txn2c} = base_assert_loc_v2_txn(Miner, Full2Gateway, PubKeyBin, PubKeyBin, Loc2, 2, Chain),
+%%    SignedTxn1c = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign, [Txn2c, SigFun]),
+%%    SignedTxn2c = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, sign_payer, [SignedTxn1c, SigFun]),
+%%
+%%    ok = ct_rpc:call(Miner, blockchain_worker, submit_txn, [SignedTxn2b]),
+%%    ok = ct_rpc:call(Miner, blockchain_worker, submit_txn, [SignedTxn2c]),
+
+    %% wait 4 blocks, confirm the txn is still there
+    ok = miner_ct_utils:wait_for_gte(height, Miners, Height + 9),
+    true = miner_ct_utils:wait_until(
+                                        fun()->
+                                            maps:size(get_cached_txns_with_exclusions(Miner, IgnoredTxns)) == 0
+                                        end, 60, 200),
+
+    ok.
+
 %% ------------------------------------------------------------------
 %% Local Helper functions
 %% ------------------------------------------------------------------
@@ -388,3 +483,11 @@ nonce_updated_for_miner(Addr, ExpectedNonce, ConMiners)->
                           end, ConMiners),
             [true] == lists:usort(HaveNoncesIncremented)
         end, 200, 1000).
+
+base_assert_loc_v2_txn(Miner, GatewayPubkeyBin, Owner, Payer, Loc, Nonce, Chain) ->
+    Txn0 = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, new, [GatewayPubkeyBin, Owner, Payer, Loc, Nonce]),
+    Fee = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, calculate_fee, [Txn0, Chain]),
+    SFee = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, calculate_staking_fee, [Txn0, Chain]),
+    Txn1 = ct_rpc:call(Miner, blockchain_txn_assert_location_v2, fee, [Txn0, Fee]),
+    ct:pal("assert loc v2, txn fee ~p, staking fee ~p, total: ~p", [Fee, SFee, Fee + SFee]),
+    {Txn1, ct_rpc:call(Miner, blockchain_txn_assert_location_v2, staking_fee, [Txn1, SFee])}.
