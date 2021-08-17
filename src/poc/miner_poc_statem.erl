@@ -816,6 +816,7 @@ validate_witness(Witness, Ledger) ->
 allow_request(BlockHash, #data{blockchain=Blockchain,
                                address=Address,
                                poc_interval=POCInterval0}) ->
+    lager:debug("AAA=>BlockHash=~p, Address=~p, POCInterval0=~p", [BlockHash, Address, POCInterval0]),
     Ledger = blockchain:ledger(Blockchain),
     POCInterval =
         case POCInterval0 of
@@ -838,7 +839,9 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
                                     true;
                                 LastChallenge ->
                                     case (Height - LastChallenge) > POCInterval of
-                                        true -> 1 == rand:uniform(max(10, POCInterval div 10));
+                                        true ->
+                                            lager:debug("AAA=>LastChallenge=~p, Height=~p, POCInterval=~p", [LastChallenge, Height, POCInterval]),
+                                            1 == rand:uniform(max(10, POCInterval div 10));
                                         false -> false
                                     end
                             end,
