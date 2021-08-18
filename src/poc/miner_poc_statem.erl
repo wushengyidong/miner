@@ -185,9 +185,10 @@ requesting(info, Msg, #data{blockchain = Chain} = Data) when Chain =:= undefined
 requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
            #data{address=Address}=Data) ->
     Now = erlang:system_time(seconds),
+    lager:debug("AAA=>BlockHash=~p, Sync=~p", [BlockHash, Sync]),
     case blockchain:get_block(BlockHash, Data#data.blockchain) of
         {ok, Block} ->
-            case Sync andalso (Now - blockchain_block:time(Block) > 3600) of
+            case Sync andalso (Now - blockchain_block:time(Block) > 36) of
                 false ->
                     case allow_request(BlockHash, Data) of
                         false ->
@@ -830,6 +831,7 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
             {ok, GwInfo} ->
                 case blockchain_ledger_gateway_v2:is_valid_capability(GwInfo, ?GW_CAPABILITY_POC_CHALLENGER, Ledger) of
                     true ->
+                        lager:info("AAA=>got block ~p in allow_request", [BlockHash]),
                         {ok, Block} = blockchain:get_block(BlockHash, Blockchain),
                         Height = blockchain_block:height(Block),
                         ChallengeOK =
@@ -850,7 +852,9 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
                         ChallengeOK andalso LocationOK;
                     _ ->
                         %% the GW is not allowed to send POC challenges
-                        false
+                        %%false
+                        lager:info("AAA=>is_valid_capability false"),
+                        true
                 end;
             %% mostly this is going to be unasserted full nodes
             _ ->
