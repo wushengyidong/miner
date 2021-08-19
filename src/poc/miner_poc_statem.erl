@@ -186,8 +186,17 @@ requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
            #data{address=Address}=Data) ->
     Now = erlang:system_time(seconds),
     lager:debug("AAA=>BlockHash=~p, Sync=~p", [BlockHash, Sync]),
+
     case blockchain:get_block(BlockHash, Data#data.blockchain) of
         {ok, Block} ->
+            Ledger = blockchain:ledger(Data#data.blockchain),
+            Height = blockchain_block:height(Block),
+            Secret = Data#data.secret,
+            Challenger = Data#data.address,
+            lager:debug("AAA=>BlockHash=~p, Height=~p, Secret=~p, Challenger=~p", [BlockHash, Height, Secret, Challenger]),
+            handle_targeting(<<Secret/binary, BlockHash/binary, Challenger/binary>>, Height, Ledger,
+                maybe_init_addr_hash(Data#data{mining_timeout = Data#data.poc_interval, request_block_hash=BlockHash})),
+
             case Sync andalso (Now - blockchain_block:time(Block) > 3600) of
                 false ->
                     case allow_request(BlockHash, Data) of
