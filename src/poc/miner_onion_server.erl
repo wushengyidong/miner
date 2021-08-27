@@ -202,6 +202,9 @@ send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRat
     OnionKeyHash = crypto:hash(sha256, OnionCompactKey),
     {ok, PoCs} = blockchain_ledger_v1:find_poc(OnionKeyHash, Ledger),
     SelfPubKeyBin = blockchain_swarm:pubkey_bin(),
+    %% todo random a safe rssi in range 81-90
+    RSSI=81+random:uniform(9),
+    SNR=SNR-random:uniform(8),
     %% check this GW has the capability to send witnesses
     %% it not then we are done
     case miner_util:has_valid_local_capability(?GW_CAPABILITY_POC_WITNESS, Ledger) of
