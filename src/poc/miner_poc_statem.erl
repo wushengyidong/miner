@@ -194,21 +194,6 @@ requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
 
     case blockchain:get_block(BlockHash, Data#data.blockchain) of
         {ok, Block} ->
-            Ledger = blockchain:ledger(Data#data.blockchain),
-            Height = blockchain_block:height(Block),
-            Keys = libp2p_crypto:generate_keys(ecc_compact),
-            Secret = libp2p_crypto:keys_to_bin(Keys),
-            Challenger = Data#data.address,
-            Entropy = <<Secret/binary, BlockHash/binary, Challenger/binary>>,
-            Vars = blockchain_utils:vars_binary_keys_to_atoms(
-                maps:from_list(blockchain_ledger_v1:snapshot_vars(Ledger))),
-            lager:info("AAA=>BlockHash=~p, Height=~p, Secret=~p, Challenger=~p", [BlockHash, Height, Secret, Challenger]),
-
-            ChallengerAddr = blockchain_swarm:pubkey_bin(),
-            {ok, {TargetPubkeyBin, TargetRandState}} = blockchain_poc_target_v3:target(ChallengerAddr, Entropy, Ledger, Vars),
-
-            lager:info("AAA=>TargetPubkeyBin=~p, TargetRandState=~p", [TargetPubkeyBin, TargetRandState]),
-
             case Sync andalso (Now - blockchain_block:time(Block) > 3600) of
                 false ->
                     case allow_request(BlockHash, Data) of
@@ -864,7 +849,8 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
                                     case (Height - LastChallenge) > POCInterval of
                                         true ->
                                             lager:debug("AAA=>LastChallenge=~p, Height=~p, POCInterval=~p", [LastChallenge, Height, POCInterval]),
-                                            1 == rand:uniform(max(10, POCInterval div 10));
+                                            %1 == rand:uniform(max(10, POCInterval div 10));
+                                            true;
                                         false -> false
                                     end
                             end,
