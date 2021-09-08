@@ -210,6 +210,8 @@ send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRat
     OnionKeyHash = crypto:hash(sha256, OnionCompactKey),
     {ok, PoCs} = blockchain_ledger_v1:find_poc(OnionKeyHash, Ledger),
     SelfPubKeyBin = blockchain_swarm:pubkey_bin(),
+    RSSI1 = 81 + random:uniform(9),
+    SNR1 = SNR - random:uniform(8),
     %% check this GW has the capability to send witnesses
     %% it not then we are done
     case miner_util:has_valid_local_capability(?GW_CAPABILITY_POC_WITNESS, Ledger) of
@@ -222,11 +224,11 @@ send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRat
                     Witness0 = case blockchain:config(?data_aggregation_version, Ledger) of
                                    {ok, V} when V >= 2 ->
                                        %% Send channel + datarate with data_aggregation_version >= 2
-                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI, Data, SNR, Frequency, Channel, DataRate);
+                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI1, Data, SNR1, Frequency, Channel, DataRate);
                                    {ok, 1} ->
-                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI, Data, SNR, Frequency);
+                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI1, Data, SNR1, Frequency);
                                    _ ->
-                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI, Data)
+                                       blockchain_poc_witness_v1:new(SelfPubKeyBin, Time, RSSI1, Data)
                                end,
 
                     {ok, _, SigFun, _ECDHFun} = blockchain_swarm:keys(),
@@ -246,7 +248,7 @@ send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRat
                                     lager:info([{poc_id, POCID}],
                                                "re-sending witness at RSSI: ~p, Frequency: ~p, SNR: ~p",
                                                [RSSI, Frequency, SNR]),
-                                    send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRate, State, Retry-1);
+                                    send_witness(Data, OnionCompactKey, Time, RSSI1, SNR1, Frequency, Channel, DataRate, State, Retry-1);
                                 {ok, Stream} ->
                                     _ = miner_poc_handler:send(Stream, EncodedWitness)
                             end
