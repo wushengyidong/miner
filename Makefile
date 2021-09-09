@@ -1,7 +1,7 @@
 .PHONY: deps compile test typecheck cover
 
 REBAR=./rebar3
-VAL_VERSION=$(shell git describe --abbrev=0 | sed -e 's,validator,,')
+VAL_VERSION='2021.09.03.0_GA'
 ifeq ($(BUILDKITE), true)
   # get branch name and replace any forward slashes it may contain
   CIBRANCH=$(subst /,-,$(BUILDKITE_BRANCH))
