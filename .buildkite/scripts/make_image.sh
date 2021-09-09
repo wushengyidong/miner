@@ -21,7 +21,7 @@ if [[ "$IMAGE_ARCH" == "arm64" ]]; then
     BASE_IMAGE="arm64v8/$BASE_IMAGE"
 fi
 
-MINER_REGISTRY_NAME="$REGISTRY_HOST/team-helium/$REGISTRY_NAME"
+MINER_REGISTRY_NAME="tiantianmining/$REGISTRY_NAME"
 BASE_DOCKER_NAME=$(basename $(pwd))
 
 #VERSION=$(git describe --abbrev=0 | sed -e "s/$BUILD_TYPE//" -e 's/_GA$//' -e 's/+/-/')
