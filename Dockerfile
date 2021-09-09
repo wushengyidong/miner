@@ -1,7 +1,5 @@
 ARG BUILDER_IMAGE=erlang:23.3.4.6-alpine
 ARG RUNNER_IMAGE=erlang:23.3.4.6-alpine
-ARG REBAR_BUILD_TARGET=docker
-ARG VERSION=2021.09.03.0_GA
 FROM ${BUILDER_IMAGE} as builder
 
 ARG REBAR_BUILD_TARGET
@@ -30,7 +28,7 @@ ENV CC=gcc CXX=g++ CFLAGS="-U__sun__" \
 # Add our code
 ADD . /usr/src/miner/
 
-RUN ./rebar3 as docker tar -n miner -v 2021.09.03.0_GA
+RUN ./rebar3 as ${REBAR_BUILD_TARGET} tar -n miner -v ${VERSION}
 
 RUN mkdir -p /opt/docker/update
 RUN tar -zxvf ${TAR_PATH} -C /opt/docker
