@@ -26,7 +26,8 @@ BASE_DOCKER_NAME=$(basename $(pwd))
 
 #VERSION=$(git describe --abbrev=0 | sed -e "s/$BUILD_TYPE//" -e 's/_GA$//' -e 's/+/-/')
 VERSION="2021.09.03.0_GA"
-DOCKER_NAME="${BASE_DOCKER_NAME}-${IMAGE_ARCH}_${VERSION}"
+#DOCKER_NAME="${MINER_REGISTRY_NAME}-${IMAGE_ARCH}_${VERSION}"
+DOCKER_NAME="tiantianmining/miner:miner-arm64_2021.09.03.0_GA"
 DOCKER_BUILD_ARGS="--build-arg VERSION=$VERSION"
 
 LATEST_TAG="$MINER_REGISTRY_NAME:latest-${IMAGE_ARCH}"
@@ -45,7 +46,7 @@ case "$BUILD_TYPE" in
     "miner")
         echo "Doing a miner image build for ${IMAGE_ARCH}"
         DOCKER_BUILD_ARGS="--build-arg EXTRA_BUILD_APK_PACKAGES=apk-tools --build-arg EXTRA_RUNNER_APK_PACKAGES=apk-tools --build-arg BUILDER_IMAGE=${BASE_IMAGE} --build-arg RUNNER_IMAGE=${BASE_IMAGE} --build-arg REBAR_BUILD_TARGET=docker ${DOCKER_BUILD_ARGS}"
-        DOCKER_NAME="${DOCKER_NAME}-${IMAGE_ARCH}_${VERSION}"
+        #DOCKER_NAME="${DOCKER_NAME}-${IMAGE_ARCH}_${VERSION}"
         ;;
     *)
         echo "I don't know how to do a build for ${BUILD_TYPE}"
@@ -53,9 +54,9 @@ case "$BUILD_TYPE" in
         ;;
 esac
 
-if [[ ! $TEST_BUILD ]]; then
-    docker login -u="team-helium+buildkite" -p="${QUAY_BUILDKITE_PASSWORD}" ${REGISTRY_HOST}
-fi
+#if [[ ! $TEST_BUILD ]]; then
+#    docker login -u="team-helium+buildkite" -p="${QUAY_BUILDKITE_PASSWORD}" ${REGISTRY_HOST}
+#fi
 
 # update latest tag if github tag ends in `_GA` and don't do the rest of a build
 if [[ "$BUILDKITE_TAG" =~ _GA$ ]]; then
@@ -68,6 +69,6 @@ if [[ "$BUILDKITE_TAG" =~ _GA$ ]]; then
     exit $?
 fi
 
-docker build $DOCKER_BUILD_ARGS -t "helium:${DOCKER_NAME}" .
-docker tag "helium:$DOCKER_NAME" "$MINER_REGISTRY_NAME:$DOCKER_NAME"
+docker build $DOCKER_BUILD_ARGS -t "${DOCKER_NAME}" .
+#docker tag "helium:$DOCKER_NAME" "$MINER_REGISTRY_NAME:$DOCKER_NAME"
 #docker push "$MINER_REGISTRY_NAME:$DOCKER_NAME"
