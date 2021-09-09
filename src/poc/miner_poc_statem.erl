@@ -198,9 +198,9 @@ requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
                 false ->
                     case allow_request(BlockHash, Data) of
                         false ->
-                        %%    lager:debug("AAA=>request not allowed @ ~p", [BlockHash]),
-                            %%    {keep_state, save_data(maybe_init_addr_hash(Data))};
-                            %%true ->
+                            lager:debug("AAA=>request not allowed @ ~p", [BlockHash]),
+                            {keep_state, save_data(maybe_init_addr_hash(Data))};
+                        true ->
                             {Txn, Keys, Secret} = create_request(Address, BlockHash, Ledger),
                             #{public := PubKey} = Keys,
                             lager:md([{poc_id, blockchain_utils:poc_id(libp2p_crypto:pubkey_to_bin(PubKey))}]),
@@ -209,9 +209,9 @@ requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
                             TxnRef = make_ref(),
                             ok = blockchain_worker:submit_txn(Txn, fun(Result) -> Self ! {TxnRef, Result} end),
                             lager:info("AAA=>submitted poc request ~p", [Txn]),
-                            {next_state, mining, save_data(maybe_init_addr_hash(Data#data{state=mining, secret=Secret,
-                                                                     onion_keys=Keys, responses=#{},
-                                                                     poc_hash=BlockHash, txn_ref=TxnRef}))}
+                            {next_state, mining, save_data(maybe_init_addr_hash(Data#data{state = mining, secret = Secret,
+                                onion_keys = Keys, responses = #{},
+                                poc_hash = BlockHash, txn_ref = TxnRef}))}
                     end;
                 true ->
                     handle_event(info, Msg, save_data(maybe_init_addr_hash(Data)))
