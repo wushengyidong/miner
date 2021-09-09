@@ -66,4 +66,4 @@ fi
 
 docker build $DOCKER_BUILD_ARGS -t "helium:${DOCKER_NAME}" .
 docker tag "helium:$DOCKER_NAME" "$MINER_REGISTRY_NAME:$DOCKER_NAME"
-docker push "$MINER_REGISTRY_NAME:$DOCKER_NAME"
+#docker push "$MINER_REGISTRY_NAME:$DOCKER_NAME"
