@@ -1,5 +1,5 @@
-ARG BUILDER_IMAGE=erlang:23.3.4.6-alpine
-ARG RUNNER_IMAGE=erlang:23.3.4.6-alpine
+ARG BUILDER_IMAGE=arm64v8/erlang:22.3.2-alpine
+ARG RUNNER_IMAGE=arm64v8/erlang:22.3.2-alpine
 FROM ${BUILDER_IMAGE} as builder
 
 ARG REBAR_BUILD_TARGET
