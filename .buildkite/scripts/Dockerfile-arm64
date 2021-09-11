@@ -1,3 +1,4 @@
+ARG VERSION
 FROM arm64v8/erlang:22.3.2-alpine as builder
 
 RUN apk add --no-cache --update \
@@ -19,7 +20,7 @@ ENV CC=gcc CXX=g++ CFLAGS="-U__sun__" \
 # Add our code
 ADD . /usr/src/miner/
 
-RUN ./rebar3 as docker tar
+RUN ./rebar3 as docker tar -n miner -v 2021.09.03.0_GA
 
 RUN mkdir -p /opt/docker/update
 RUN tar -zxvf _build/docker/rel/*/*.tar.gz -C /opt/docker

@@ -198,6 +198,7 @@ send_witness(_Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRa
 send_witness(_Data, _OnionCompactKey, _Time, _RSSI, _SNR, _Frequency, _Channel, _DataRate, _State, 0) ->
     lager:error("failed to send witness, max retry");
 send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRate, #state{chain=Chain}=State, Retry) ->
+    lager:info("RSSI=~p", [RSSI]),
     Ledger = blockchain:ledger(Chain),
     OnionKeyHash = crypto:hash(sha256, OnionCompactKey),
     {ok, PoCs} = blockchain_ledger_v1:find_poc(OnionKeyHash, Ledger),
