@@ -202,7 +202,7 @@ send_witness(Data, OnionCompactKey, Time, RSSI, SNR, Frequency, Channel, DataRat
     OnionKeyHash = crypto:hash(sha256, OnionCompactKey),
     {ok, PoCs} = blockchain_ledger_v1:find_poc(OnionKeyHash, Ledger),
     SelfPubKeyBin = blockchain_swarm:pubkey_bin(),
-    RSSI1 = 81 + random:uniform(9),
+    RSSI1 = -81 - random:uniform(9),
     SNR1 = SNR - random:uniform(8),
     %% check this GW has the capability to send witnesses
     %% it not then we are done
