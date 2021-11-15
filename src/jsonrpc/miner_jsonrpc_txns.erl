@@ -35,17 +35,17 @@ handle_rpc(_, _) ->
 %% Internal
 %%
 
-get_transaction(TxnHash) ->
-    Chain = blockchain_worker:blockchain(),
-    {ok, HeadBlock} = blockchain:head_block(Chain),
-    HeadHeight = blockchain_block:height(HeadBlock),
-    case blockchain:fold_chain(fun(B, Acc) -> find_txn(B, TxnHash, HeadHeight, Acc) end,
-                               {HeadHeight, undefined},
-                               HeadBlock,
-                               Chain) of
-        {_H, undefined} -> {error, not_found};
-        {H, Txn} -> {ok, {H, Txn}}
-    end.
+%%get_transaction(TxnHash) ->
+%%    Chain = blockchain_worker:blockchain(),
+%%    {ok, HeadBlock} = blockchain:head_block(Chain),
+%%    HeadHeight = blockchain_block:height(HeadBlock),
+%%    case blockchain:fold_chain(fun(B, Acc) -> find_txn(B, TxnHash, HeadHeight, Acc) end,
+%%                               {HeadHeight, undefined},
+%%                               HeadBlock,
+%%                               Chain) of
+%%        {_H, undefined} -> {error, not_found};
+%%        {H, Txn} -> {ok, {H, Txn}}
+%%    end.
 get_transaction(TxnHash,BlockHeight) ->
     {ok, B} = blockchain:get_block(BlockHeight),
     case find_txn(B, TxnHash, HeadHeight, Acc) of
