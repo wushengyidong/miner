@@ -14,10 +14,10 @@
 
 %% TODO: add an optional start block height parameter
 
-handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash }) ->
+handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash,<<"height">>:=BlockHeight }) ->
     try
         BinHash = ?B64_TO_BIN(Hash),
-        case get_transaction(BinHash) of
+        case get_transaction(BinHash,BlockHeight) of
             {ok, {Height, Txn}} ->
                 Json = blockchain_txn:to_json(Txn, []),
                 Json#{block => Height};
@@ -46,7 +46,12 @@ get_transaction(TxnHash) ->
         {_H, undefined} -> {error, not_found};
         {H, Txn} -> {ok, {H, Txn}}
     end.
-
+get_transaction(TxnHash,BlockHeight) ->
+    {ok, B} = blockchain:get_block(BlockHeight),
+    case find_txn(B, TxnHash, HeadHeight, Acc) of
+        {_H, undefined} -> {error, not_found};
+        {H,Txn} -> {ok,{H,Txn}}
+    end.
 find_txn(_Blk, _TxnHash, Start, {CH, undefined}) when Start - CH > ?MAX_LOOKBACK -> return;
 find_txn(Blk, TxnHash, _Start, {_CH, undefined}) ->
     NewHeight = blockchain_block:height(Blk),
