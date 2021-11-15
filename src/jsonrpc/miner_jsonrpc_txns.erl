@@ -48,7 +48,7 @@ handle_rpc(_, _) ->
 %%    end.
 get_transaction(TxnHash,BlockHeight) ->
     {ok, B} = blockchain:get_block(BlockHeight),
-    case find_txn(B, TxnHash, HeadHeight, Acc) of
+    case find_txn(B, TxnHash, BlockHeight,  {BlockHeight, undefined}) of
         {_H, undefined} -> {error, not_found};
         {H,Txn} -> {ok,{H,Txn}}
     end.
