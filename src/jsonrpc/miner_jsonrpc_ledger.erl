@@ -85,6 +85,13 @@ handle_rpc(<<"ledger_gateways">>, #{ <<"address">> := Address}) ->
     end;
 handle_rpc(<<"ledger_gateways">>, Params) ->
     ?jsonrpc_error({invalid_params, Params});
+handle_rpc(<<"ledger_r5">>, []) ->
+    Ledger = get_ledger(),
+    {ok, Hexes} = blockchain_ledger_v1:get_hexes_list(Ledger),
+    ReturnHex = #{
+        <<"hexes">> => Hexes
+    },
+    ReturnHex;
 handle_rpc(<<"ledger_validators">>, []) ->
     Ledger = get_ledger(),
     {ok, Height} = blockchain_ledger_v1:current_height(Ledger),
