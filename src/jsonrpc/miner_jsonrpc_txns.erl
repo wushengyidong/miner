@@ -14,10 +14,10 @@
 
 %% TODO: add an optional start block height parameter
 
-handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash }) ->
+handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash,<<"height">>:=BlockHeight }) ->
     try
         BinHash = ?B64_TO_BIN(Hash),
-        case get_transaction(BinHash) of
+        case get_transaction(BinHash,BlockHeight) of
             {ok, {Height, Txn}} ->
                 Json = blockchain_txn:to_json(Txn, []),
                 Json#{block => Height};
@@ -35,16 +35,24 @@ handle_rpc(_, _) ->
 %% Internal
 %%
 
-get_transaction(TxnHash) ->
+%%get_transaction(TxnHash) ->
+%%    Chain = blockchain_worker:blockchain(),
+%%    {ok, HeadBlock} = blockchain:head_block(Chain),
+%%    HeadHeight = blockchain_block:height(HeadBlock),
+%%    case blockchain:fold_chain(fun(B, Acc) -> find_txn(B, TxnHash, HeadHeight, Acc) end,
+%%                               {HeadHeight, undefined},
+%%                               HeadBlock,
+%%                               Chain) of
+%%        {_H, undefined} -> {error, not_found};
+%%        {H, Txn} -> {ok, {H, Txn}}
+%%    end.
+
+get_transaction(TxnHash,BlockHeight) ->
     Chain = blockchain_worker:blockchain(),
-    {ok, HeadBlock} = blockchain:head_block(Chain),
-    HeadHeight = blockchain_block:height(HeadBlock),
-    case blockchain:fold_chain(fun(B, Acc) -> find_txn(B, TxnHash, HeadHeight, Acc) end,
-                               {HeadHeight, undefined},
-                               HeadBlock,
-                               Chain) of
+    {ok, B} = blockchain:get_block(BlockHeight,Chain),
+    case find_txn(B, TxnHash, BlockHeight,  {BlockHeight, undefined}) of
         {_H, undefined} -> {error, not_found};
-        {H, Txn} -> {ok, {H, Txn}}
+        {H,Txn} -> {ok,{H,Txn}}
     end.
 
 find_txn(_Blk, _TxnHash, Start, {CH, undefined}) when Start - CH > ?MAX_LOOKBACK -> return;
