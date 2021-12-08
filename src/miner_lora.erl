@@ -166,31 +166,45 @@ reg_domain_data_for_addr(Addr, #state{chain=Chain}) ->
         undefined ->
             {error, no_ledger};
         Ledger ->
-            %% check if the poc 11 vars are active yet
-            case blockchain_ledger_v1:find_gateway_location(Addr, Ledger) of
-                {ok, Location} ->
-                    case blockchain_region_v1:h3_to_region(Location, Ledger) of
-                        {ok, Region} ->
-                            case blockchain_region_params_v1:for_region(Region, Ledger) of
-                                {ok, RegionParams} ->
-                                    {ok, {Region, [ (blockchain_region_param_v1:channel_frequency(RP) / ?MHzToHzMultiplier) || RP <- RegionParams ]}};
-                                {error, Reason} ->
-                                    {error, Reason}
-                            end;
-                        {error, regulatory_regions_not_set} ->
-                            case country_code_for_addr(Addr) of
-                                {ok, CC} ->
-                                    %% use country code to get regulatory domain data
-                                    reg_domain_data_for_countrycode(CC);
+            case blockchain:config(?poc_version, Ledger) of
+                {ok, V} when V > 10 ->
+                    %% check if the poc 11 vars are active yet
+                    case blockchain_ledger_v1:find_gateway_location(Addr, Ledger) of
+                        {ok, Location} ->
+                            case blockchain_region_v1:h3_to_region(Location, Ledger) of
+                                {ok, Region} ->
+                                    case blockchain_region_params_v1:for_region(Region, Ledger) of
+                                        {ok, RegionParams} ->
+                                            {ok, {Region, [ (blockchain_region_param_v1:channel_frequency(RP) / ?MHzToHzMultiplier) || RP <- RegionParams ]}};
+                                        {error, Reason} ->
+                                            {error, Reason}
+                                    end;
+                                {error, region_var_not_set} ->
+                                    %% poc-v11 is partially active
+                                    lookup_via_country_code(Addr);
+                                {error, regulatory_regions_not_set} ->
+                                    %% poc-v11 is partially active
+                                    lookup_via_country_code(Addr);
                                 {error, Reason} ->
                                     {error, Reason}
                             end;
                         {error, Reason} ->
                             {error, Reason}
                     end;
-                {error, Reason} ->
-                    {error, Reason}
+                _ ->
+                    %% before poc-v11
+                    lookup_via_country_code(Addr)
             end
+    end.
+
+lookup_via_country_code(Addr) ->
+    %% lookup via country code
+    case country_code_for_addr(Addr) of
+        {ok, CC} ->
+            %% use country code to get regulatory domain data
+            reg_domain_data_for_countrycode(CC);
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 -spec reg_domain_data_for_countrycode(binary()) -> {ok, freq_data() | {error, any()}}.
@@ -341,7 +355,17 @@ handle_info(chain_check, State) ->
     end;
 handle_info({blockchain_event, {new_chain, NC}}, State) ->
     {noreply, update_state_using_chain(NC, State)};
-handle_info({blockchain_event, _}, State) ->
+handle_info({blockchain_event, {add_block, Hash, _Sync, _Ledger}},
+            #state{chain=Chain}=State) when Chain /= undefined ->
+    {ok, Block} = blockchain:get_block(Hash, Chain),
+    Predicate = fun(T) -> blockchain_txn:type(T) == blockchain_txn_vars_v1 end,
+    case blockchain_utils:find_txn(Block, Predicate) of
+        Txs when length(Txs) > 0 ->
+            %% Resend the timeout for regulatory domain
+            self() ! reg_domain_timeout;
+        _ ->
+            ok
+    end,
     {noreply, State};
 handle_info(reg_domain_timeout, #state{chain=undefined} = State) ->
     %% There is no chain, we cannot lookup regulatory domain data yet
@@ -623,8 +647,10 @@ handle_packets([Packet|Tail], Gateway, RxInstantLocal_us, #state{reg_region = Re
 route_non_longfi(<<?JOIN_REQUEST:3, _:5, AppEUI:64/integer-unsigned-little, DevEUI:64/integer-unsigned-little, _DevNonce:2/binary, _MIC:4/binary>>) ->
     {lorawan, {eui, DevEUI, AppEUI}};
 route_non_longfi(<<MType:3, _:5, DevAddr:32/integer-unsigned-little, _ADR:1, _ADRACKReq:1, _ACK:1, _RFU:1, FOptsLen:4,
-                   _FCnt:16/little-unsigned-integer, _FOpts:FOptsLen/binary, PayloadAndMIC/binary>>) when MType == ?UNCONFIRMED_UP; MType == ?CONFIRMED_UP ->
-    Body = binary:part(PayloadAndMIC, {0, byte_size(PayloadAndMIC) -4}),
+                   _FCnt:16/little-unsigned-integer, _FOpts:FOptsLen/binary, PayloadAndMIC/binary>>) when (MType == ?UNCONFIRMED_UP orelse MType == ?CONFIRMED_UP) andalso
+                                                                                                          %% MIC is 4 bytes, so the binary must be at least that long
+                                                                                                          byte_size(PayloadAndMIC) >= 4 ->
+    Body = binary:part(PayloadAndMIC, {0, byte_size(PayloadAndMIC) - 4}),
     {FPort, _FRMPayload} =
         case Body of
             <<>> -> {undefined, <<>>};
@@ -662,7 +688,7 @@ send_to_router(Type, RoutingInfo, Packet, Region) ->
 -spec country_code_for_addr(libp2p_crypto:pubkey_bin()) -> {ok, binary()} | {error, failed_to_find_geodata_for_addr}.
 country_code_for_addr(Addr)->
     B58Addr = libp2p_crypto:bin_to_b58(Addr),
-    URL = "https://api.helium.io/v1/hotspots/" ++ B58Addr,
+    URL = application:get_env(miner, api_base_url, "https://api.helium.io/v1") ++ "/hotspots/" ++ B58Addr,
     case httpc:request(get, {URL, []}, [{timeout, 5000}],[]) of
         {ok, {{_HTTPVersion, 200, _RespBody}, _Headers, JSONBody}} = Resp ->
             lager:debug("hotspot info response: ~p", [Resp]),
@@ -856,7 +882,7 @@ send_packet(Payload, When, ChannelSelectorFun, DataRate, Power, IPol, HlmPacket,
 
 -spec create_packet(
     Payload :: binary(),
-    When :: integer(),
+    When :: atom() | integer(),
     LocalFreq :: integer(),
     DataRate :: string(),
     Power :: float(),
@@ -864,11 +890,18 @@ send_packet(Payload, When, ChannelSelectorFun, DataRate, Power, IPol, HlmPacket,
     Token :: binary()
 ) -> binary().
 create_packet(Payload, When, LocalFreq, DataRate, Power, IPol, Token) ->
+
+    IsImme = When == immediate,
+    Tmst = case IsImme of
+               false -> When;
+               true -> 0
+           end,
+
     DecodedJSX = #{<<"txpk">> => #{
                         <<"ipol">> => IPol, %% IPol for downlink to devices only, not poc packets
-                        <<"imme">> => When == immediate,
+                        <<"imme">> => IsImme,
                         <<"powe">> => trunc(Power),
-                        <<"tmst">> => When, %% TODO gps time?
+                        <<"tmst">> => Tmst,
                         <<"freq">> => LocalFreq,
                         <<"modu">> => <<"LORA">>,
                         <<"datr">> => list_to_binary(DataRate),

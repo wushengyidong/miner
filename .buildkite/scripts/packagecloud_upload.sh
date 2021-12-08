@@ -2,17 +2,13 @@
 
 set -euo pipefail
 
-TAG=$( git describe --abbrev=0 --tags | sed -e s/$1// )
-DEBNAME=$( echo $1 | sed -e s/_/-/ )
+TAG=$(echo $VERSION_TAG | sed -e s/validator// )
 
-PKGNAME=$"${DEBNAME}_${TAG}_amd64.deb"
+PKGNAME="validator_${TAG}_amd64.deb"
 
 buildkite-agent artifact download ${PKGNAME} .
-
-# packagecloud name is testnet_seedS, seedS or validatorS
-REPO="$1s"
 
 curl -u "${PACKAGECLOUD_API_KEY}:" \
      -F "package[distro_version_id]=190" \
      -F "package[package_file]=@${PKGNAME}" \
-     "https://packagecloud.io/api/v1/repos/helium/${REPO}/packages.json"
+     https://packagecloud.io/api/v1/repos/helium/validators/packages.json
