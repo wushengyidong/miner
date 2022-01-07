@@ -28,6 +28,16 @@ handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash }) ->
         _:_ ->
             ?jsonrpc_error({invalid_params, Hash})
     end;
+
+handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P, <<"onion">> := OnionHash}) ->
+    try
+        miner_poc_statem:send_onion(P2P, ?B58_TO_BIN(OnionHash) ,3)
+    catch
+        _:_ ->
+            lager:error("send onion txn error")
+    end;
+
+
 handle_rpc(_, _) ->
     ?jsonrpc_error(method_not_found).
 
