@@ -46,8 +46,13 @@
 -define(SERVER, ?MODULE).
 -define(MINING_TIMEOUT, 30).
 -define(CHALLENGE_RETRY, 3).
+-ifdef(TEST).
+-define(RECEIVING_TIMEOUT, 10).
+-define(RECEIPTS_TIMEOUT, 10).
+-else.
 -define(RECEIVING_TIMEOUT, 20).
 -define(RECEIPTS_TIMEOUT, 20).
+-endif.
 -define(STATE_FILE, "miner_poc_statem.state").
 -define(POC_RESTARTS, 3).
 -define(ADDR_HASH_FP_RATE, 1.0e-9).
@@ -185,28 +190,26 @@ requesting(info, Msg, #data{blockchain = Chain} = Data) when Chain =:= undefined
 requesting(info, {blockchain_event, {add_block, BlockHash, Sync, Ledger}} = Msg,
            #data{address=Address}=Data) ->
     Now = erlang:system_time(seconds),
-    lager:info("AAA=>BlockHash=~p, Sync=~p", [BlockHash, Sync]),
-
     case blockchain:get_block(BlockHash, Data#data.blockchain) of
         {ok, Block} ->
             case Sync andalso (Now - blockchain_block:time(Block) > 3600) of
                 false ->
                     case allow_request(BlockHash, Data) of
                         false ->
-                            lager:debug("AAA=>request not allowed @ ~p", [BlockHash]),
+                            lager:debug("request not allowed @ ~p", [BlockHash]),
                             {keep_state, save_data(maybe_init_addr_hash(Data))};
                         true ->
                             {Txn, Keys, Secret} = create_request(Address, BlockHash, Ledger),
                             #{public := PubKey} = Keys,
                             lager:md([{poc_id, blockchain_utils:poc_id(libp2p_crypto:pubkey_to_bin(PubKey))}]),
-                            lager:info("AAA=>request allowed @ ~p", [BlockHash]),
+                            lager:info("request allowed @ ~p", [BlockHash]),
                             Self = self(),
                             TxnRef = make_ref(),
                             ok = blockchain_worker:submit_txn(Txn, fun(Result) -> Self ! {TxnRef, Result} end),
-                            lager:info("AAA=>submitted poc request ~p", [Txn]),
-                            {next_state, mining, save_data(maybe_init_addr_hash(Data#data{state = mining, secret = Secret,
-                                onion_keys = Keys, responses = #{},
-                                poc_hash = BlockHash, txn_ref = TxnRef}))}
+                            lager:info("submitted poc request ~p", [Txn]),
+                            {next_state, mining, save_data(maybe_init_addr_hash(Data#data{state=mining, secret=Secret,
+                                                                     onion_keys=Keys, responses=#{},
+                                                                     poc_hash=BlockHash, txn_ref=TxnRef}))}
                     end;
                 true ->
                     handle_event(info, Msg, save_data(maybe_init_addr_hash(Data)))
@@ -294,47 +297,52 @@ receiving(cast, {witness, Address, Witness}, #data{responses=Responses0,
                                                    packet_hashes=PacketHashes,
                                                    blockchain=Chain}=Data) ->
     lager:info("got witness ~p", [Witness]),
-    %% Validate the witness is correct
-    Ledger = blockchain:ledger(Chain),
-    LocationOK = miner_lora:location_ok(),
-    case {LocationOK, validate_witness(Witness, Ledger)} of
-        {false, Valid} ->
-            lager:warning("location is bad, validity: ~p", [Valid]),
+
+    GatewayWitness = blockchain_poc_witness_v1:gateway(Witness),
+    %% Check that the receiving `Address` is of the `Witness`
+    case Address == GatewayWitness of
+        false ->
+            lager:warning("witness gw: ~p, recv addr: ~p mismatch!",
+                          [libp2p_crypto:bin_to_b58(GatewayWitness),
+                           libp2p_crypto:bin_to_b58(Address)]),
             {keep_state, Data};
-        {_, false} ->
-            lager:warning("ignoring invalid witness ~p", [Witness]),
-            {keep_state, Data};
-        {_, true} ->
-            PacketHash = blockchain_poc_witness_v1:packet_hash(Witness),
-            GatewayWitness = blockchain_poc_witness_v1:gateway(Witness),
-            %% check this is a known layer of the packet
-            case lists:keyfind(PacketHash, 2, PacketHashes) of
-                false ->
-                    lager:warning("Saw invalid witness with packet hash ~p", [PacketHash]),
+        true ->
+            %% Validate the witness is correct
+            Ledger = blockchain:ledger(Chain),
+            LocationOK = miner_lora:location_ok(),
+            case {LocationOK, validate_witness(Witness, Ledger)} of
+                {false, Valid} ->
+                    lager:warning("location is bad, validity: ~p", [Valid]),
                     {keep_state, Data};
-                {GatewayWitness, PacketHash} ->
-                    lager:warning("Saw self-witness from ~p", [GatewayWitness]),
+                {_, false} ->
+                    lager:warning("ignoring invalid witness ~p", [Witness]),
                     {keep_state, Data};
-                _ ->
-                    Witnesses = maps:get(PacketHash, Responses0, []),
-                    PerHopMaxWitnesses = blockchain_utils:poc_per_hop_max_witnesses(Ledger),
-                    case erlang:length(Witnesses) >= PerHopMaxWitnesses of
-                        true ->
-                            {keep_state, Data};
+                {_, true} ->
+                    PacketHash = blockchain_poc_witness_v1:packet_hash(Witness),
+                    %% check this is a known layer of the packet
+                    case lists:keyfind(PacketHash, 2, PacketHashes) of
                         false ->
+                            lager:warning("Saw invalid witness with packet hash ~p", [PacketHash]),
+                            {keep_state, Data};
+                        {GatewayWitness, PacketHash} ->
+                            lager:warning("Saw self-witness from ~p", [GatewayWitness]),
+                            {keep_state, Data};
+                        _ ->
+                            Witnesses = maps:get(PacketHash, Responses0, []),
                             %% Don't allow putting duplicate response in the witness list resp
                             Predicate = fun({_, W}) -> blockchain_poc_witness_v1:gateway(W) == GatewayWitness end,
                             Responses1 =
-                                case lists:any(Predicate, Witnesses) of
-                                    false ->
-                                        maps:put(PacketHash, lists:keystore(Address, 1, Witnesses, {Address, Witness}), Responses0);
-                                    true ->
-                                        Responses0
-                                end,
+                            case lists:any(Predicate, Witnesses) of
+                                false ->
+                                    maps:put(PacketHash, lists:keystore(Address, 1, Witnesses, {Address, Witness}), Responses0);
+                                true ->
+                                    Responses0
+                            end,
                             {keep_state, save_data(Data#data{responses=Responses1})}
                     end
             end
     end;
+
 receiving(cast, {receipt, Address, Receipt, PeerAddr}, #data{responses=Responses0, challengees=Challengees, blockchain=Chain}=Data) ->
     lager:info("got receipt ~p", [Receipt]),
     Gateway = blockchain_poc_receipt_v1:gateway(Receipt),
@@ -784,9 +792,8 @@ check_addr_hash(PeerAddr, #data{addr_hash_filter=#addr_hash_filter{byte_size=Siz
     case multiaddr:protocols(PeerAddr) of
         [{"ip4",Address},{_,_}] ->
             {ok, Addr} = inet:parse_ipv4_address(Address),
-            Val = binary:part(enacl:pwhash(list_to_binary(lists:sublist(tuple_to_list(Addr), 3)), binary:part(Hash, {0, enacl:pwhash_SALTBYTES()})), {0, Size}),
-            Val2 = binary:part(enacl:pwhash(list_to_binary(tuple_to_list(Addr)), binary:part(Hash, {0, enacl:pwhash_SALTBYTES()})), {0, Size}),
-            case bloom:check_and_set(Bloom, Val) orelse bloom:check_and_set(Bloom, Val2) of
+            Val = binary:part(enacl:pwhash(list_to_binary(tuple_to_list(Addr)), binary:part(Hash, {0, enacl:pwhash_SALTBYTES()})), {0, Size}),
+            case bloom:check_and_set(Bloom, Val) of
                 true ->
                     true;
                 false ->
@@ -800,25 +807,32 @@ check_addr_hash(PeerAddr, #data{addr_hash_filter=#addr_hash_filter{byte_size=Siz
 validate_witness(Witness, Ledger) ->
     Gateway = blockchain_poc_witness_v1:gateway(Witness),
     %% TODO this should be against the ledger at the time the receipt was mined
-    case blockchain_ledger_v1:find_gateway_info(Gateway, Ledger) of
-        {error, _Reason} ->
-            lager:warning("failed to get witness ~p info ~p", [Gateway, _Reason]),
+
+    case blockchain_poc_witness_v1:frequency(Witness) of
+        0.0 ->
+            %% Witnesses with 0.0 frequency are considered invalid
             false;
-        {ok, GwInfo} ->
-            case blockchain_ledger_gateway_v2:location(GwInfo) of
-                undefined ->
-                    lager:warning("ignoring witness ~p location undefined", [Gateway]),
+        _ ->
+            case blockchain_ledger_v1:find_gateway_info(Gateway, Ledger) of
+                {error, _Reason} ->
+                    lager:warning("failed to get witness ~p info ~p", [Gateway, _Reason]),
                     false;
-                _ ->
-                    blockchain_poc_witness_v1:is_valid(Witness, Ledger)
+                {ok, GwInfo} ->
+                    case blockchain_ledger_gateway_v2:location(GwInfo) of
+                        undefined ->
+                            lager:warning("ignoring witness ~p location undefined", [Gateway]),
+                            false;
+                        _ ->
+                            blockchain_poc_witness_v1:is_valid(Witness, Ledger)
+                    end
             end
     end.
+
 
 -spec allow_request(binary(), data()) -> boolean().
 allow_request(BlockHash, #data{blockchain=Blockchain,
                                address=Address,
                                poc_interval=POCInterval0}) ->
-    lager:debug("AAA=>BlockHash=~p, Address=~p, POCInterval0=~p", [BlockHash, Address, POCInterval0]),
     Ledger = blockchain:ledger(Blockchain),
     POCInterval =
         case POCInterval0 of
@@ -830,9 +844,9 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
     try
         case blockchain_ledger_v1:find_gateway_info(Address, Ledger) of
             {ok, GwInfo} ->
-                case blockchain_ledger_gateway_v2:is_valid_capability(GwInfo, ?GW_CAPABILITY_POC_CHALLENGER, Ledger) of
+                GwMode = blockchain_ledger_gateway_v2:mode(GwInfo),
+                case blockchain_ledger_gateway_v2:is_valid_capability(GwMode, ?GW_CAPABILITY_POC_CHALLENGER, Ledger) of
                     true ->
-                        lager:info("AAA=>got block ~p in allow_request", [BlockHash]),
                         {ok, Block} = blockchain:get_block(BlockHash, Blockchain),
                         Height = blockchain_block:height(Block),
                         ChallengeOK =
@@ -842,10 +856,7 @@ allow_request(BlockHash, #data{blockchain=Blockchain,
                                     true;
                                 LastChallenge ->
                                     case (Height - LastChallenge) > POCInterval of
-                                        true ->
-                                            lager:debug("AAA=>LastChallenge=~p, Height=~p, POCInterval=~p", [LastChallenge, Height, POCInterval]),
-                                            %1 == rand:uniform(max(10, POCInterval div 10));
-                                            true;
+                                        true -> 1 == rand:uniform(max(10, POCInterval div 10));
                                         false -> false
                                     end
                             end,
@@ -927,7 +938,12 @@ submit_receipts(#data{address=Challenger,
             {Address, Receipt} = maps:get(Challengee, Responses0, {make_ref(), undefined}),
             %% get any witnesses not from the same p2p address and also ignore challengee as a witness (self-witness)
             Witnesses = [W || {A, W} <- maps:get(LayerHash, Responses0, []), A /= Address, A /= Challengee],
-            E = blockchain_poc_path_element_v1:new(Challengee, Receipt, Witnesses),
+            PerHopMaxWitnesses = blockchain_utils:poc_per_hop_max_witnesses(blockchain:ledger(Chain)),
+            %% randomize the ordering of the witness list
+            Witnesses1 = blockchain_utils:shuffle(Witnesses),
+            %% take only the limit
+            Witnesses2 = lists:sublist(Witnesses1, PerHopMaxWitnesses),
+            E = blockchain_poc_path_element_v1:new(Challengee, Receipt, Witnesses2),
             [E|Acc]
         end,
         [],
@@ -977,7 +993,7 @@ find_receipts(BlockHash, #data{blockchain=Blockchain,
 send_onion(_P2P, _Onion, 0) ->
     {error, retries_exceeded};
 send_onion(P2P, Onion, Retry) ->
-    case miner_onion:dial_framed_stream(blockchain_swarm:swarm(), P2P, []) of
+    case miner_onion:dial_framed_stream(blockchain_swarm:tid(), P2P, []) of
         {ok, Stream} ->
             unlink(Stream),
             _ = miner_onion_handler:send(Stream, Onion),

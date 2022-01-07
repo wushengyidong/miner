@@ -13,6 +13,7 @@
  {blockchain,
   [
    {listen_addresses, ["/ip4/0.0.0.0/tcp/2154"]},
+   {fetch_latest_from_snap_source, false},
    {block_sync_batch_size, 10},
    {block_sync_batch_limit, 100},
    {validation_width, "${VALIDATION_WIDTH}"},
@@ -35,6 +36,8 @@
  {miner,
   [
    {mode, validator},
+   {rocksdb_cache_size, 32},
+   {rocksdb_write_buffer_size, 32},
    %% these two now disable all the poc stuff
    {use_ebus, false},
    {radio_device, undefined},

@@ -1,10 +1,13 @@
 -module(miner_jsonrpc_info).
 
 -include("miner_jsonrpc.hrl").
+-include_lib("blockchain/include/blockchain.hrl").
 -behavior(miner_jsonrpc_handler).
 
 %% jsonrpc_handler
 -export([handle_rpc/2]).
+%% helpers
+-export([get_gateway_location/3]).
 
 %%
 %% jsonrpc_handler
@@ -12,10 +15,8 @@
 
 handle_rpc(<<"info_height">>, []) ->
     Chain = blockchain_worker:blockchain(),
-    {ok, Height} = blockchain:height(Chain),
     {ok, SyncHeight} = blockchain:sync_height(Chain),
-    {ok, HeadBlock} = blockchain:head_block(Chain),
-    {Epoch, _} = blockchain_block_v1:election_info(HeadBlock),
+    {ok, #block_info_v2{height=Height, election_info={Epoch, _}}} = blockchain:head_block_info(Chain),
     Output = #{
         epoch => Epoch,
         height => Height
@@ -50,6 +51,10 @@ handle_rpc(<<"info_region">>, []) ->
             {ok, Region} -> atom_to_binary(Region, utf8)
         end,
     #{region => R};
+handle_rpc(<<"info_location">>, []) ->
+    PubKey = blockchain_swarm:pubkey_bin(),
+    Chain = blockchain_worker:blockchain(),
+    get_gateway_location(Chain, PubKey, #{});
 
 %% TODO handle onboarding key data??
 handle_rpc(<<"info_summary">>, []) ->
@@ -65,12 +70,10 @@ handle_rpc(<<"info_summary">>, []) ->
     GWInfo = get_gateway_info(Chain, PubKey),
 
     % get height data
-    {ok, Height} = blockchain:height(Chain),
     {ok, SyncHeight} = blockchain:sync_height(Chain),
 
-    %% get epoch
-    {ok, HeadBlock} = blockchain:head_block(Chain),
-    {Epoch, _} = blockchain_block_v1:election_info(HeadBlock),
+    %% get epoch and height
+    {ok, #block_info_v2{height=Height, election_info={Epoch, _}}} = blockchain:head_block_info(Chain),
 
     %% get peerbook count
     Swarm = blockchain_swarm:swarm(),
@@ -88,9 +91,10 @@ handle_rpc(<<"info_summary">>, []) ->
         peer_book_entry_count => PeerBookEntryCount,
         firmware_version => FirmwareVersion,
         gateway_details => GWInfo,
-        version => miner:version()
+        version => ?TO_VALUE(get_miner_version())
     };
-
+handle_rpc(<<"info_version">>, []) ->
+    #{version => ?TO_VALUE(get_miner_version())};
 handle_rpc(_, _) ->
     ?jsonrpc_error(method_not_found).
 
@@ -104,6 +108,13 @@ get_mac_addrs() ->
 get_firmware_version() ->
     iolist_to_binary(os:cmd("cat /etc/lsb_release")).
 
+get_miner_version() ->
+    Releases = release_handler:which_releases(),
+    case erlang:hd(Releases) of
+        {_,ReleaseVersion,_,_} -> ReleaseVersion;
+        {error,_} -> undefined
+    end.
+
 get_uptime() ->
     %% returns seconds of uptime
     {UpTimeMS, _} = statistics(wall_clock),
@@ -113,15 +124,39 @@ get_gateway_info(Chain, PubKey) ->
     Ledger = blockchain:ledger(Chain),
     case blockchain_ledger_v1:find_gateway_info(PubKey, Ledger) of
         {ok, Gateway} ->
-            GWLoc = blockchain_ledger_gateway_v2:location(Gateway),
             GWOwnAddr = libp2p_crypto:pubkey_bin_to_p2p(
                 blockchain_ledger_gateway_v2:owner_address(Gateway)
             ),
-            #{ <<"location">> => ?TO_VALUE(GWLoc),
-               <<"owner">> => ?TO_VALUE(GWOwnAddr) };
+            GWMode = blockchain_ledger_gateway_v2:mode(Gateway),
+            get_gateway_location(Chain, Gateway, #{ 
+                <<"owner">> => ?TO_VALUE(GWOwnAddr),
+                <<"mode">> => ?TO_VALUE(GWMode)
+            });
         _ ->
             undefined
     end.
+
+get_gateway_location(Chain, PubKey, Dest) when is_binary(PubKey) ->
+    Ledger = blockchain:ledger(Chain),
+    case blockchain_ledger_v1:find_gateway_info(PubKey, Ledger) of
+        {ok, Gateway} -> get_gateway_location(Chain, Gateway, Dest);
+        _ -> Dest
+    end;
+get_gateway_location(_Chain, Gateway, Dest) ->
+    GWLoc = case blockchain_ledger_gateway_v2:location(Gateway) of
+        undefined -> undefined;
+        L -> h3:to_string(L)
+    end,
+    GWElevation = blockchain_ledger_gateway_v2:elevation(Gateway),
+    GWGain = case blockchain_ledger_gateway_v2:gain(Gateway) of
+        undefined -> undefined;
+        V -> V / 10
+    end,
+    Dest#{ 
+        <<"location">> => ?TO_VALUE(GWLoc),
+        <<"gain">> => ?TO_VALUE(GWGain),
+        <<"elevation">> => ?TO_VALUE(GWElevation)
+     }.
 
 format_macs_from_interfaces(IFs) ->
     lists:foldl(
