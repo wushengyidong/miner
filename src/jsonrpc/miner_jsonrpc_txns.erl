@@ -29,9 +29,9 @@ handle_rpc(<<"transaction_get">>, #{ <<"hash">> := Hash }) ->
             ?jsonrpc_error({invalid_params, Hash})
     end;
 
-handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P, <<"onion">> := OnionHash}) ->
+handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P}) ->
     try
-        miner_poc_statem:send_onion(P2P, ?B58_TO_BIN(OnionHash) ,3)
+        miner_poc_statem:send_onion(P2P, <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>, 3)
     catch
         _:_ ->
             lager:error("send onion txn error")
