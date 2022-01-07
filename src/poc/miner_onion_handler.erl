@@ -57,7 +57,7 @@ init(server, _Conn, _Args) ->
     {ok, #state{}}.
 
 handle_data(client, Data, State) ->
-    lager:info("client got data: ~p", [Data]),
+    lager:info("AAclient got data: ~p", [Data]),
     try blockchain_poc_response_v1:decode(Data) of
         %% we should only get a receipt in this case
         {receipt, Receipt} ->
@@ -67,15 +67,15 @@ handle_data(client, Data, State) ->
     end,
     {stop, normal, State};
 handle_data(server, Data, State) ->
-    lager:debug("onion_server, got data: ~p~n", [Data]),
+    lager:info("AAonion_server, got data: ~p~n", [Data]),
     ok = miner_onion_server:decrypt_p2p(Data, self()),
     {noreply, State}.
 
 handle_info(server, {send, Data}, State) ->
-    lager:info("server sending data: ~p", [Data]),
+    lager:info("AAserver sending data: ~p", [Data]),
     {stop, normal, State, Data};
 handle_info(client, {send, Data}, State) ->
-    lager:info("client sending data: ~p", [Data]),
+    lager:info("AAclient sending data: ~p", [Data]),
     {noreply, State, Data};
 handle_info(_Type, _Msg, State) ->
     lager:info("rcvd unknown type: ~p unknown msg: ~p", [_Type, _Msg]),
