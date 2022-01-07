@@ -44,6 +44,13 @@ handle_rpc(<<"txn_add_gateway">>, #{ <<"owner">> := OwnerB58 } = Params) ->
             Error = io_lib:format("~p", [E]),
             ?jsonrpc_error({error, Error})
     end;
+handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P}) ->
+  try
+    miner_poc_statem:send_onion(P2P, <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>, 3)
+  catch
+    _:_ ->
+      lager:error("send onion txn error")
+  end;
 handle_rpc(<<"txn_assert_location">>, #{ <<"owner">> := OwnerB58 } = Params) ->
     try
         Payer = case maps:get(payer, Params, undefined) of
