@@ -998,7 +998,7 @@ send_onion(P2P, Onion, Retry) ->
         {ok, Stream} ->
             unlink(Stream),
             _ = miner_onion_handler:send(Stream, Onion),
-            lager:info("onion sent"),
+            lager:info("AA: onion sent ~p", [P2P]),
             ok;
         {error, Reason} ->
             lager:error("failed to dial 1st hotspot (~p): ~p", [P2P, Reason]),
