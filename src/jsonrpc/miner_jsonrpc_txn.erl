@@ -44,12 +44,12 @@ handle_rpc(<<"txn_add_gateway">>, #{ <<"owner">> := OwnerB58 } = Params) ->
             Error = io_lib:format("~p", [E]),
             ?jsonrpc_error({error, Error})
     end;
-handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P}) ->
-    BinAddress = ?B58_TO_BIN(P2P),
-    lager:info("BinAddress: ~p", BinAddress),
+handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := Addr}) ->
+    BinAddress = ?B58_TO_BIN(Addr),
+    lager:info("BinAddress: ~p", [BinAddress]),
     P2P = libp2p_crypto:pubkey_bin_to_p2p(BinAddress),
     Onion = <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>,
-    lager:info("P2P: ~p", P2P),
+    lager:info("P2P: ~p", [P2P]),
 
     case miner_poc_statem:send_onion(P2P, Onion, 3) of
         ok ->
