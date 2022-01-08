@@ -45,12 +45,18 @@ handle_rpc(<<"txn_add_gateway">>, #{ <<"owner">> := OwnerB58 } = Params) ->
             ?jsonrpc_error({error, Error})
     end;
 handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := P2P}) ->
-  case miner_poc_statem:send_onion(libp2p_crypto:pubkey_bin_to_p2p(libp2p_crypto:b58_to_bin(P2P)), <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>, 3) of
-      ok -> 
-          lager:info("ok");
-      {error, Reason} ->
-          lager:error("send onion txn failed to dial 1st hotspot (~p): ~p", [P2P, Reason])
-  end;
+    BinAddress = libp2p_crypto:b58_to_bin(P2P),
+    lager:info("BinAddress: ~p", BinAddress),
+    P2P = libp2p_crypto:pubkey_bin_to_p2p(BinAddress),
+    Onion = <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>,
+    lager:info("P2P: ~p", P2P),
+
+    case miner_poc_statem:send_onion(P2P, Onion, 3) of
+        ok ->
+            lager:info("ok");
+        {error, Reason} ->
+            lager:error("send onion txn failed to dial 1st hotspot (~p): ~p", [P2P, Reason])
+    end;
 handle_rpc(<<"txn_assert_location">>, #{ <<"owner">> := OwnerB58 } = Params) ->
     try
         Payer = case maps:get(payer, Params, undefined) of
