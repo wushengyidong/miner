@@ -3,13 +3,16 @@
 -define(IDENTIFY(Conn),
         case libp2p_connection:session(Conn) of
             {ok, Session} ->
+                lager:warning("AA: IDENTIFY session ok"),
                 libp2p_session:identify(Session, self(), ?MODULE),
                 receive
                     {handle_identify, ?MODULE, {ok, Identify}} ->
                         libp2p_identify:pubkey_bin(Identify)
                 after 10000 ->
-                          erlang:error(failed_identify_timeout)
+                        lager:error("AA: IDENTIFY failed_identify_timeout"),
+                        erlang:error(failed_identify_timeout)
                 end;
             {error, closed} ->
+                lager:error("AA: IDENTIFY dead_session"),
                 erlang:error(dead_session)
         end).

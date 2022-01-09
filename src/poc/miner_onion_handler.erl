@@ -54,6 +54,7 @@ init(client, Conn, _Args) ->
     {ok, #state{peer=?IDENTIFY(Conn), peer_addr=PeerAddr}};
 init(server, _Conn, _Args) ->
     lager:info("started ~p server", [?MODULE]),
+    lager:info("AA: server stack: ~s~n", [element(2, process_info(self(), backtrace))]),
     {ok, #state{}}.
 
 handle_data(client, Data, State) ->
@@ -67,7 +68,7 @@ handle_data(client, Data, State) ->
     end,
     {stop, normal, State};
 handle_data(server, Data, State) ->
-    lager:debug("onion_server, got data: ~p~n", [Data]),
+    lager:info("AA: onion_server, got data: ~p~n", [Data]),
     ok = miner_onion_server:decrypt_p2p(Data, self()),
     {noreply, State}.
 
