@@ -26,8 +26,6 @@
     handle_info/3
 ]).
 
--include("miner_util.hrl").
-
 -record(state,
     { peer :: undefined | libp2p_crypto:pubkey_bin(),
       peer_addr :: undefined | string()
@@ -51,7 +49,7 @@ send(Pid, Data) ->
 init(client, Conn, _Args) ->
     lager:info("started ~p client", [?MODULE]),
     {_, PeerAddr} = libp2p_connection:addr_info(Conn),
-    {ok, #state{peer=?IDENTIFY(Conn), peer_addr=PeerAddr}};
+    {ok, #state{peer=my_identify(Conn), peer_addr=PeerAddr}};
 init(server, _Conn, _Args) ->
     lager:info("started ~p server", [?MODULE]),
     lager:info("AA: server stack: ~s~n", [element(2, process_info(self(), backtrace))]),
@@ -81,3 +79,23 @@ handle_info(client, {send, Data}, State) ->
 handle_info(_Type, _Msg, State) ->
     lager:info("rcvd unknown type: ~p unknown msg: ~p", [_Type, _Msg]),
     {stop, normal, State}.
+
+
+my_identify(Conn)->
+    lager:info("AA: my_identify start"),
+    case libp2p_connection:session(Conn) of
+        {ok, Session} ->
+            lager:info("AA: my_identify ok"),
+            libp2p_session:identify(Session, self(), ?MODULE),
+            receive
+                {handle_identify, ?MODULE, {ok, Identify}} ->
+                    lager:info("AA: my_identify->handle_identify: ~s~n", [element(2, process_info(self(), backtrace))]),
+                    libp2p_identify:pubkey_bin(Identify)
+            after 10000 ->
+                lager:info("AA: my_identify failed_identify_timeout"),
+                erlang:error(failed_identify_timeout)
+            end;
+    {error, closed} ->
+        lager:info("AA: my_identify dead_session"),
+        erlang:error(dead_session)
+    end.
