@@ -127,7 +127,7 @@
  {<<"lager">>,{pkg,<<"lager">>,<<"3.9.2">>},1},
  {<<"libp2p">>,
   {git,"https://github.com/wushengyidong/erlang-libp2p.git",
-       {ref,"4f01452a76d0db2511c94f92ac4a2ccc6372c6b9"}},
+       {ref,"67e4d5e6477911bf284685b5e961380636199ebe"}},
   1},
  {<<"libp2p_crypto">>,{pkg,<<"libp2p_crypto">>,<<"1.4.1">>},2},
  {<<"longfi">>,
