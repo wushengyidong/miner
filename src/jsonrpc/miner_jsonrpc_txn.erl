@@ -62,8 +62,8 @@ handle_rpc(<<"txn_send_onion_handler">>, #{ <<"address">> := Addr}) ->
   lager:info("BinAddress: ~p", [BinAddress]),
   P2pAddr = libp2p_crypto:pubkey_bin_to_p2p(BinAddress),
   TID = blockchain_swarm:tid(),
-  {ok, Session} = libp2p_swarm:connect(TID, P2pAddr),
-  {ok, Connection} = libp2p_session:open(Session),
+  Path = "miner_onion/1.0.0",
+  {ok, Connection} = libp2p_swarm:dial(TID, P2pAddr, Path),
 
   case miner_onion_handler:init(client, Connection, [])of
     {error, Error} ->
