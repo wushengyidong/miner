@@ -57,10 +57,7 @@ handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := Addr}) ->
       lager:error("send onion txn failed to dial 1st hotspot (~p): ~p", [P2P, Reason])
   end;
 
-handle_rpc(<<"txn_send_onion_handler">>, #{ <<"address">> := Addrress}) ->
-  BinAddress = ?B58_TO_BIN(Addrress),
-  lager:info("BinAddress: ~p", [BinAddress]),
-  Addr = libp2p_crypto:pubkey_bin_to_p2p(BinAddress),
+handle_rpc(<<"txn_send_onion_handler">>, #{ <<"address">> := Addr}) ->
   TID = blockchain_swarm:tid(),
   Path = "miner_onion/1.0.0",
   lager:info("Path: ~p", [Path]),
