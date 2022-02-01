@@ -57,6 +57,13 @@ handle_rpc(<<"ledger_balance">>, #{<<"htlc">> := true}) ->
     );
 handle_rpc(<<"ledger_balance">>, Params) ->
     ?jsonrpc_error({invalid_params, Params});
+handle_rpc(<<"ledger_r5">>, []) ->
+    Ledger = get_ledger(),
+    {ok, Hexes} = blockchain_ledger_v1:get_hexes_list(Ledger),
+    ReturnHex = #{
+        <<"hexes">> => Hexes
+    },
+    ReturnHex;
 handle_rpc(<<"ledger_gateways">>, []) ->
     handle_rpc(<<"ledger_gateways">>, #{<<"verbose">> => false});
 handle_rpc(<<"ledger_gateways">>, #{<<"verbose">> := Verbose}) ->

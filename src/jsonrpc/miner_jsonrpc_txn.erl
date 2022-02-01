@@ -31,7 +31,7 @@ handle_rpc(<<"txn_queue">>, []) ->
 handle_rpc(<<"txn_add_gateway">>, #{ <<"owner">> := OwnerB58 } = Params) ->
     try
         Payer = optional_binary_to_list(
-            maps:get(payer, Params, undefined)
+            maps:get(<<"payer">>, Params, undefined)
         ),
         Owner = binary_to_list(OwnerB58),
         {ok, Bin} = blockchain:add_gateway_txn(Owner, Payer),
@@ -44,46 +44,17 @@ handle_rpc(<<"txn_add_gateway">>, #{ <<"owner">> := OwnerB58 } = Params) ->
             Error = io_lib:format("~p", [E]),
             ?jsonrpc_error({error, Error})
     end;
-handle_rpc(<<"txn_send_onion">>, #{ <<"address">> := Addr}) ->
-  BinAddress = ?B58_TO_BIN(Addr),
-  lager:info("BinAddress: ~p", [BinAddress]),
-  P2P = libp2p_crypto:pubkey_bin_to_p2p(BinAddress),
-  Onion = <<241,196,9,50,154,84,214,46,147,213,117,115,158,112,103,72,244,39,113,171,217>>,
-  lager:info("P2P: ~p", [P2P]),
-  case miner_poc_statem:send_onion(P2P, Onion, 3) of
-    ok ->
-      lager:info("ok");
-    {error, Reason} ->
-      lager:error("send onion txn failed to dial 1st hotspot (~p): ~p", [P2P, Reason])
-  end;
-
-handle_rpc(<<"txn_send_onion_handler">>, #{ <<"address">> := Addr}) ->
-  TID = blockchain_swarm:tid(),
-  Path = "miner_onion/1.0.0",
-  lager:info("Path: ~p", [Path]),
-  {ok, Connection} = libp2p_swarm:dial(TID, Addr, Path),
-  lager:info("Connection: ~p", [Connection]),
-
-  case miner_onion_handler:init(client, Connection, [])of
-    {error, Error} ->
-      lager:error("Failed to call miner_onion_handler:init: ~p", [Error]),
-      {error, Error};
-    {ok, _} ->
-      lager:info("Sucessfully to call miner_onion_handler:init")
-  end,
-  ok;
-
 handle_rpc(<<"txn_assert_location">>, #{ <<"owner">> := OwnerB58 } = Params) ->
     try
         Payer = optional_binary_to_list(
-            maps:get(payer, Params, undefined)
+            maps:get(<<"payer">>, Params, undefined)
         ),
         Owner = binary_to_list(OwnerB58),
         H3String = case parse_location(Params) of
                        {error, _} = Err -> throw(Err);
                        {ok, S} -> S
                    end,
-        Nonce = maps:get(nonce, Params, 1),
+        Nonce = maps:get(<<"nonce">>, Params, 1),
         {ok, Bin} = blockchain:assert_loc_txn(H3String, Owner, Payer, Nonce),
         B64 = base64:encode(Bin),
         #{ <<"result">> => B64 }

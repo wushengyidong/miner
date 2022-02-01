@@ -24,6 +24,7 @@
    {snapshot_memory_limit, 300},
    {key, undefined},
    {relay_limit, 100},
+   {blocks_to_protect_from_gc, 100000},
    {base_dir, "/var/data"}
   ]},
   {libp2p,
@@ -36,6 +37,7 @@
   ]},
  {miner,
   [
+   {denylist_keys, undefined},
    {jsonrpc_ip, {0,0,0,0}}, %% bind jsonrpc to host when in docker container
    {mode, validator},
    {stabilization_period, 8000},
@@ -50,6 +52,5 @@
    %% as without one miner_lora is not started
    %% including the params anyway in case someone needs it in this env
    {region_override, 'US915'}
-
   ]}
 ].
