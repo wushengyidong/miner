@@ -52,7 +52,7 @@ RUN ./rebar3 as ${REBAR_BUILD_TARGET} tar -n miner -v ${VERSION}
 
 RUN mkdir -p /opt/docker/update
 RUN tar -zxvf ${TAR_PATH} -C /opt/docker
-RUN wget -O /opt/docker/update/genesis https://snapshots.helium.wtf/genesis.${BUILD_NET}
+RUN wget -O /opt/docker/update/genesis https://snapshots.helium.wtf/genesis.mainnet
 
 FROM ${RUNNER_IMAGE} as runner
 
